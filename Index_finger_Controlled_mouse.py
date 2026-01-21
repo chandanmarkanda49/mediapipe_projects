@@ -35,7 +35,7 @@ while cap.isOpened() :   #main loop in which logic is written ~= void loop
             screen_x = np.interp(x , [0,w], [0,screen_width])
             screen_y = np.interp(y , [0,h], [0,screen_height])
 
-            pyautogui.moveTo(screen_x , screen_y ) #method to move mouse
+            pyautogui.moveTo(screen_x , screen_y , duration = 0.01) #method to move mouse
             mp_drawing.draw_landmarks(frame , hand_landmarks , mp_hands.HAND_CONNECTIONS) #draws the landmarks on frame 
 
     cv2.imshow("webcam_feed" , frame)   
