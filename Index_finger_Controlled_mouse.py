@@ -7,8 +7,9 @@ import math
 
 mp_hands = mp.solutions.hands  
 mp_drawing = mp.solutions.drawing_utils
-hands = mp_hands.Hands(min_detection_confidence = 0.7,
-                       min_tracking_confidence = 0.7   , 
+hands = mp_hands.Hands( min_detection_confidence = 0.7,
+                       min_tracking_confidence = 0.7  ,
+                       max_num_hands = 1 , 
                         )
 
 
@@ -88,7 +89,16 @@ while cap.isOpened() :   #main loop in which logic is written ~= void loop
                     
                 elif index_finger_tip.y > 0.6 :
                     pyautogui.scroll(-60)
-                    cv2.putText(frame, "Scroll down" , (10, 50), cv2.FONT_HERSHEY_PLAIN , 1 ,(0,0, 255,), 2)
+                    cv2.putText(frame, "Scroll down" , (10, 50), cv2.FONT_HERSHEY_PLAIN , 1 ,(0, 255,0), 2)
+            #####    SCREENSHOT  ########
+            last_screenshot_time = 0 
+            screenshot_duration = 3
+            if sum(fingers) == 0 :
+                current_time = time.time()
+                if current_time - last_screenshot_time > screenshot_duration : #iss if mai tabhi jayega jab time more than 2 seconds ho 
+                    pyautogui.screenshot(f" screenSHOT_{int(current_time)}.png") #png file save krr dega ye 
+                    cv2.putText(frame, "Screenshot Taken" , (10, 50), cv2.FONT_HERSHEY_PLAIN , 1 ,(0, 255,0), 2)
+                    last_screenshot_time = current_time #yha pe last screenshot time ko update krr diya so that loop repeat ho ske 
 
     cv2.imshow("webcam_feed" , frame)   
 
