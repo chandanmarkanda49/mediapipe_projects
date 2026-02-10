@@ -47,7 +47,7 @@ while cap.isOpened():
      rgb_frame = cv2.cvtColor(frame , cv2.COLOR_BGR2RGB)
      results = hands.process(rgb_frame) 
      cv2.putText(frame,coordinates,(10, 70), cv2.FONT_HERSHEY_PLAIN , 1 ,(0,255, 255, 0), 2) 
-     
+    
      if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks :
             index_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
@@ -59,6 +59,7 @@ while cap.isOpened():
             pinky_finger_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP]
             mid_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
             mid_finger_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_MCP] 
+            landmarks = hand_landmarks.landmark
             x_i = int(index_finger_tip.x * w)
             y_i = int(index_finger_tip.y * h)  
 
@@ -147,8 +148,8 @@ while cap.isOpened():
                 distance = math.hypot(index_x - thumb_x, index_y - thumb_y)
 
              # Distance ko volume % mein convert karo
-                # 30 px = 0% volume, 220 px = 100% volume (aap apne haath ke size ke hisaab adjust kar sakte ho)
-                vol_percent = np.interp(distance, [30, 220], [0, 100])
+                # 30 px = 0% volume, 190 px = 100% volume (aap apne haath ke size ke hisaab adjust kar sakte ho)
+                vol_percent = np.interp(distance, [30, 60], [0, 100])
                 vol_percent = np.clip(vol_percent, 0, 100)
                 # Smoothing (jump avoid karne ke liye) - bahut smooth feel dega
                 vol_percent = prev_vol_percent * 0.6 + vol_percent * 0.4
@@ -211,6 +212,69 @@ while cap.isOpened():
 
              # Ya phir center mein bada text
             # cv2.putText(frame, "VOLUME CONTROL", (20, h//2), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 220, 220), 3)
+
+
+            ########## 10 SECONDS FORWARD ###########
+
+            # Get wrist position (origin/reference point)
+            wrist_x = landmarks[0].x
+            wrist_y = landmarks[0].y
+
+            # Helper function to calculate Euclidean distance (normalized coordinates)
+            def dist_to_wrist(lm_id):
+                tip_x = landmarks[lm_id].x
+                tip_y = landmarks[lm_id].y
+                return math.hypot(tip_x - wrist_x, tip_y - wrist_y)
+
+            # 1. Thumb must be extended → thumb tip FAR from wrist
+            thumb_tip_dist = dist_to_wrist(4)          # landmark 4 = THUMB_TIP
+            if thumb_tip_dist > 0.18 :
+             thumb_extended = thumb_tip_dist     # adjust this threshold (0.18–0.28 typical)
+
+            # 2. Other 4 fingers must be curled → their tips CLOSE to wrist
+            folded_threshold = 0.25                   # adjust: 0.12–0.18 common (smaller = stricter)
+
+            fingers_curled = True
+            for tip_id in [8, 12, 16, 20]:             # index_tip, middle_tip, ring_tip, pinky_tip
+                d = dist_to_wrist(tip_id)
+                if d > folded_threshold:
+                    fingers_curled = False
+                    break
+
+            # Optional extra check: thumb should be somewhat "up/sideways" relative to palm
+            # (helps avoid false positives when fist + thumb slightly out)
+            thumb_ip_dist   = dist_to_wrist(3)         # THUMB_IP
+            thumb_mcp_dist  = dist_to_wrist(2)         # THUMB_MCP
+            thumb_sideways_ok = thumb_tip_dist > thumb_ip_dist + 0.03   # tip farther than IP
+
+            # Final condition
+            is_thumbs_up = thumb_extended and fingers_curled # and thumb_sideways_ok
+
+            # Handedness helps if you want stricter sideways check (optional)
+            if results.multi_handedness:
+                handedness = results.multi_handedness[0].classification[0].label
+                # You can add: if Right hand → thumb x should be left of index_mcp_x, etc.
+                # But distance-to-wrist often works without it
+
+            if is_thumbs_up:
+                thumbUP = True
+                # cv2.putText(frame, "THUMBS UP ", (50, 100),
+                #             cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 100), 4)
+                            
+                # Optional: show distances for tuning
+                # cv2.putText(frame, f"Thumb dist: {thumb_tip_dist:.2f}", (50, 140), ...)
+
+                if thumbUP :
+                    if thumb_tip.x > 0.65 :
+                     pg.hotkey( 'alt ', 'right')
+                     cv2.putText(frame, " 10sec ++ ", (50, 100),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 100), 4)
+                
+                    if thumb_tip.x < 0.35:
+                     pg.hotkey('alt' , 'left')
+                     cv2.putText(frame, "10 sec-- ", (50, 100),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 100), 4)
+
 
 
      cv2.imshow('Webcam Feed', frame)
