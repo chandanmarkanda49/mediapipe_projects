@@ -1,0 +1,225 @@
+import time
+import cv2        #importing all libraries needed
+import mediapipe as mp 
+import pyautogui as pg
+import numpy as np 
+import math
+import screen_brightness_control as sbc
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+from comtypes import CLSCTX_ALL
+
+mp_hands = mp.solutions.hands  
+mp_drawing = mp.solutions.drawing_utils
+hands = mp_hands.Hands( min_detection_confidence = 0.7,
+                       min_tracking_confidence = 0.7  ,
+                       max_num_hands = 2  , 
+                        )
+
+cap = cv2.VideoCapture(0) # 0 means the first webcame option available
+screen_width ,  screen_height  = pg.size()
+screen_width += 100 
+screen_height += 100
+# XY coordinates have 0, 0 origin at top left corner of the screen. X increases going right, Y increases going down.
+
+#brightness ke variables
+pinch_count = 0
+screenshot_taken = False
+
+#volume ke variables 
+devices = AudioUtilities.GetSpeakers()
+interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+volume = interface.QueryInterface(IAudioEndpointVolume)
+prev_vol_percent = 50  # starting neutral
+
+if not cap.isOpened():
+    print("Error: Camera nahi khul raha hai!")
+    exit()
+
+
+
+while cap.isOpened():
+     ret, frame = cap.read()
+     frame = cv2.flip(frame , 1 )
+     coordinates = str(pg.position())
+     if not ret:
+            break
+     h,w ,c = frame.shape     #height , width and color channel is saved in respective variables 
+     rgb_frame = cv2.cvtColor(frame , cv2.COLOR_BGR2RGB)
+     results = hands.process(rgb_frame) 
+     cv2.putText(frame,coordinates,(10, 70), cv2.FONT_HERSHEY_PLAIN , 1 ,(0,255, 255, 0), 2) 
+     
+     if results.multi_hand_landmarks:
+        for hand_landmarks in results.multi_hand_landmarks :
+            index_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+            index_finger_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP]
+            thumb_tip = hand_landmarks.landmark[4]
+            ring_finger_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_MCP]
+            ring_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
+            pinky_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
+            pinky_finger_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP]
+            mid_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+            mid_finger_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_MCP] 
+            x_i = int(index_finger_tip.x * w)
+            y_i = int(index_finger_tip.y * h)  
+
+            x_p_t = int (pinky_finger_tip.x * w)
+            y_p_t = int( pinky_finger_tip.y * h)
+
+            x_p_m = int(pinky_finger_mcp.x * w)
+            y_p_m = int(pinky_finger_mcp.y * h) 
+
+            x_r_m = int(ring_finger_mcp.x * w)
+            y_r_m = int(ring_finger_mcp.y * h)
+
+            x_r_t = int(ring_finger_tip.x * w)
+            x_r_t = int(ring_finger_tip.y * h)
+
+            x_i_m = int(index_finger_mcp.x * w)
+            y_i_m = int(index_finger_mcp.y * h)
+            #it returns the pixels value of the screen matlab screen kr pixels ke beech ka distance
+            screen_x = np.interp(x_i , [0,w], [0,screen_width])
+            screen_y = np.interp(y_i , [0,h], [0,screen_height])
+            mp_drawing.draw_landmarks(frame , hand_landmarks , mp_hands.HAND_CONNECTIONS) #draws the landmarks on frame 
+            
+            fingers = [
+                1 if hand_landmarks.landmark[tip].y < hand_landmarks.landmark[tip-2].y else 0 
+                for tip in [8, 12 , 16 , 20 ]
+                ]
+            
+             ###### brightness #######
+            current = sbc.get_brightness(display=0)   # 0 = primary monitor
+            # print("Current brightness:", current)     # list aayega jaise [75]
+            right_threshold = 0.70   # x >= 0.70 → last 30% (right side)
+            if sum(fingers) == 4 and index_finger_tip.x >= right_threshold :
+                brightness_mode = True
+            else :
+              brightness_mode = False 
+
+            if brightness_mode:
+                 y = index_finger_tip.y
+                 brightness_level = int(np.interp(y, [0.20, 0.80], [100, 10]))   # 20% se 80% range
+                # Brightness set karo (jump avoid karne ke liye thoda smooth kar sakte ho)
+                 try:
+                    current = sbc.get_brightness(display=0)[0]   # [0] list se first value nikaalo
+        
+                    # Sirf 4-5% ya zyada change ho to hi set karo (jitter kam hoga)
+                    if abs(brightness_level - current) >= 4:
+                     sbc.set_brightness(brightness_level, display=0)
+            
+                     # Visual feedback
+                     direction = "↑" if brightness_level > current else "↓"
+                     color = (0, 255, 100) if direction == "↑" else (100, 150, 255)
+            
+                     cv2.putText(frame, f"BRIGHTNESS {brightness_level}% {direction}",
+                     (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+    
+                 except Exception as e:
+                    cv2.putText(frame, "Brightness error", (10, 80),
+                    cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 2)
+
+                 else:
+                    pass
+
+                    # Mode ON hone pe visual hint (haath ke upar glow ya text)
+            if brightness_mode:
+                # Right side boundary line draw karo (visual guide)
+                line_x = int(w * right_threshold)
+                cv2.line(frame, (line_x, 0), (line_x, h), (0, 140, 255), 2)  # orange line
+                cv2.putText(frame, "BRIGHTNESS MODE ACTIVE", (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 100), 2)
+
+            ####### VOLUME CONTROL ########
+            left_threshold = 0.20
+            volume_mode = False
+            if sum(fingers) == 4 and index_finger_tip.x <= left_threshold:
+                volume_mode = True
+           
+            if volume_mode:
+            # Thumb tip (landmark 4) aur Index tip (landmark 8)
+                thumb_tip = hand_landmarks.landmark[4]
+                index_tip = hand_landmarks.landmark[8]
+                # Pixel coordinates
+                thumb_x = int(thumb_tip.x * w)
+                thumb_y = int(thumb_tip.y * h)
+                index_x = int(index_finger_tip.x * w)
+                index_y = int(index_finger_tip.y * h)
+                # Distance calculate karo (pixels mein)
+                distance = math.hypot(index_x - thumb_x, index_y - thumb_y)
+
+             # Distance ko volume % mein convert karo
+                # 30 px = 0% volume, 220 px = 100% volume (aap apne haath ke size ke hisaab adjust kar sakte ho)
+                vol_percent = np.interp(distance, [30, 220], [0, 100])
+                vol_percent = np.clip(vol_percent, 0, 100)
+                # Smoothing (jump avoid karne ke liye) - bahut smooth feel dega
+                vol_percent = prev_vol_percent * 0.6 + vol_percent * 0.4
+                prev_vol_percent = vol_percent
+
+                # Actual system volume set karo
+                vol_range = volume.GetVolumeRange()
+                min_vol, max_vol, _ = vol_range
+                target_vol = min_vol + (max_vol - min_vol) * (vol_percent / 100)
+                volume.SetMasterVolumeLevel(target_vol, None )
+
+                # ------------------- Visuals  -------------------
+    
+                # 1. Thumb aur Index ke beech line (purple color)
+                cv2.line(frame, (thumb_x, thumb_y), (index_x, index_y), (255, 0, 255), 4)  # thick purple line
+
+                # 2. Dono tips par circle  (clear dikhe)
+                cv2.circle(frame, (thumb_x, thumb_y), 6, (255, 0, 255), cv2.FILLED)   # thumb
+                cv2.circle(frame, (index_x, index_y), 6, (255, 0, 255), cv2.FILLED)   # index
+
+                # 3. Volume percentage screen par dikhao
+                direction = "LOUD" if vol_percent > prev_vol_percent else "LOW"
+                color = (0, 255, 150) if direction == "LOUD" else (150, 150, 255)
+                cv2.putText(frame, f"VOLUME: {int(vol_percent)}% {direction}",
+                (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+
+                # ... (tumhara pura volume code: distance, purple line, circles, volume text)
+
+                # Semi-transparent red box left side par
+                overlay = frame.copy()  # current frame ka copy banao
+
+                # Box coordinates
+                box_left   = 0
+                box_top    = 0
+                box_right  = int(w * left_threshold)
+                box_bottom = h
+
+                # Filled rectangle overlay par draw karo (dark red)
+                cv2.rectangle(overlay, 
+                  (box_left, box_top), 
+                  (box_right, box_bottom), 
+                  (100, 50, 150),   # dark purple-red
+                  -1)               # -1 = filled
+
+                 # Transparency blend karo (alpha = 0.3 matlab 30% opacity)
+                alpha = 0.25
+                cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+
+                # Ab border daal do (optional – zyada sharp look ke liye)
+                cv2.rectangle(frame, 
+                  (box_left, box_top), 
+                  (box_right, box_bottom), 
+                  (255, 100, 100),  # bright border
+                  3)
+
+                # Text daalo (ab box ke andar clear dikhega)
+                cv2.putText(frame, "VOLUME MODE ON", 
+                (20, 50), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 220, 220), 2)  # light color for contrast
+
+             # Ya phir center mein bada text
+            # cv2.putText(frame, "VOLUME CONTROL", (20, h//2), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 220, 220), 3)
+
+
+     cv2.imshow('Webcam Feed', frame)
+            
+     if cv2.waitKey(1) & 0xFF == ord('s'):
+       break 
+
+cap.release()
+cv2.destroyAllWindows()
+
+
+
