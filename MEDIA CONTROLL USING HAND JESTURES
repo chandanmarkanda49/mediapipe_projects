@@ -304,8 +304,13 @@ while cap.isOpened():
 
 
 
-            # Distance pixels mein
-            finger_dist = math.hypot( (index_finger_tip.x - mid_finger_tip.x ), (index_finger_tip.y - mid_finger_tip.y) )
+            # Yeh line sahi hai (pixels mein)
+            idx_x = int(index_finger_tip.x * w)
+            idx_y = int(index_finger_tip.y * h)
+            mid_x = int(mid_finger_tip.x * w)
+            mid_y = int(mid_finger_tip.y * h)
+
+            finger_dist = math.hypot(idx_x - mid_x, idx_y - mid_y)
             if index_extended and middle_extended and ring_curled and pinky_curled:
              peace_sign_active = True
              cv2.putText(frame, "PEACE SIGN ACTIVE ", (10, 60),
@@ -320,8 +325,9 @@ while cap.isOpened():
             #  cv2.circle(frame, (index_finger_tip.x,index_finger_tip.y), 10, (0, 255, 0), -1)
             #  cv2.circle(frame, (mid_finger_tip.x, mid_finger_tip.y), 10, (0, 255, 0), -1)
              #  Distance screen par dikhao (tuning ke liye helpful)
-             cv2.putText(frame, f"Dist: {finger_dist :.0f} px", (20, 50),
-                    cv2.FONT_HERSHEY_PLAIN, 1.2, (255, 215, 0), 2)
+             cv2.putText(frame, f"Dist: {finger_dist:.0f} px",
+             (10, 180),  # fixed position ya finger ke paas
+              cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 255), 2)
 
                 # ------------------- Play / Pause Logic -------------------
              current_time = time.time()
@@ -329,8 +335,8 @@ while cap.isOpened():
              if current_time - last_play_pause_time > COOLDOWN_SECONDS:
 
                             # Distance thresholds (pixels mein – yeh tune karna padega)
-                            PLAY_THRESHOLD  =30  # fingers zyada alag → play
-                            PAUSE_THRESHOLD = 15  # fingers close/join → pause
+                            PLAY_THRESHOLD  =50  # fingers zyada alag → play
+                            PAUSE_THRESHOLD = 100  # fingers close/join → pause
 
                             if finger_dist > PLAY_THRESHOLD:
                                 pg.press('space')   # ya pg.press('media_play_pause')
